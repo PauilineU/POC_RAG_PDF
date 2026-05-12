@@ -1,18 +1,17 @@
 import streamlit as st
 import os
-from pathlib import Path
+import requests
 import numpy as np
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 import faiss
-from anthropic import Anthropic
 
-# Initialize Anthropic client
-api_key = os.getenv("ANTHROPIC_API_KEY")
-if not api_key:
-    st.error("ANTHROPIC_API_KEY environment variable not set")
+# Initialize Hugging Face Inference API key and model
+hf_api_key = os.getenv("HUGGINGFACE_API_KEY")
+hf_model = os.getenv("HUGGINGFACE_MODEL", "google/flan-t5-large")
+if not hf_api_key:
+    st.error("HUGGINGFACE_API_KEY environment variable not set")
     st.stop()
-client = Anthropic()
 
 # Initialize session state
 if "model" not in st.session_state:
@@ -162,22 +161,8 @@ def process_query(user_query: str, k: int) -> str:
         "content": user_query
     })
     
-    # Call Claude API
-    messages = st.session_state.conversation.copy()
-    
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
-        max_tokens=1024,
-        system="You are a helpful assistant that answers questions based on provided documents.",
-        messages=[
-            {
-                "role": "user",
-                "content": augmented_prompt
-            }
-        ]
-    )
-    
-    assistant_message = response.content[0].text
+    # Call Hugging Face Inference API
+    assistant_message = query_hf_inference(augmented_prompt)
     
     # Add assistant response to conversation
     st.session_state.conversation.append({
@@ -186,6 +171,36 @@ def process_query(user_query: str, k: int) -> str:
     })
     
     return assistant_message
+
+
+def query_hf_inference(prompt: str) -> str:
+    """Call the Hugging Face Inference API for generation."""
+    url = f"https://api-inference.huggingface.co/models/{hf_model}"
+    headers = {
+        "Authorization": f"Bearer {hf_api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "max_new_tokens": 512,
+            "temperature": 0.2,
+            "top_p": 0.95,
+            "repetition_penalty": 1.1,
+            "return_full_text": False
+        }
+    }
+    response = requests.post(url, headers=headers, json=payload, timeout=120)
+    if response.status_code != 200:
+        raise RuntimeError(f"Hugging Face Inference API request failed: {response.status_code} {response.text}")
+    data = response.json()
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(f"Hugging Face Inference API error: {data['error']}")
+    if isinstance(data, list):
+        text = data[0].get("generated_text") if isinstance(data[0], dict) else str(data[0])
+    else:
+        text = data.get("generated_text") if isinstance(data, dict) else str(data)
+    return text or ""
 
 
 # Sidebar: PDF Upload and Settings

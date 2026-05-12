@@ -2,5 +2,5 @@ streamlit==1.40.1
 pypdf==5.1.0
 sentence-transformers==3.0.1
 faiss-cpu==1.13.2
-anthropic==0.101.0
+requests==2.31.0
 numpy==1.26.4
