@@ -1,0 +1,12 @@
+.venv/
+venv/
+.env
+.env.local
+*.pdf
+__pycache__/
+*.pyc
+.DS_Store
+.streamlit/
+*.egg-info/
+dist/
+build/
